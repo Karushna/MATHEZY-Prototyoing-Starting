@@ -4,30 +4,44 @@ import axios from "axios";
 function ChatTutor() {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   const sendQuestion = async () => {
-    if (!question) return;
+    if (!question.trim()) return;
 
-    // Add user message
-    const newMessages = [...messages, { role: "user", text: question }];
+    const userMessage = { role: "user", text: question };
+    const newMessages = [...messages, userMessage];
     setMessages(newMessages);
+    setLoading(true);
 
     try {
       const response = await axios.post("http://127.0.0.1:8000/ask-ai", {
         question: question
       });
 
-      // Add AI response
+      console.log("API Response:", response.data);
+
       setMessages([
         ...newMessages,
-        { role: "ai", text: response.data.explanation }
+        {
+          role: "ai",
+          text: response.data.explanation || "No response from AI"
+        }
       ]);
 
     } catch (error) {
       console.error(error);
-      alert("Error connecting to AI server");
+
+      setMessages([
+        ...newMessages,
+        {
+          role: "ai",
+          text: "❌ Error: Unable to connect to AI server"
+        }
+      ]);
     }
 
+    setLoading(false);
     setQuestion("");
   };
 
@@ -48,6 +62,10 @@ function ChatTutor() {
             {msg.text}
           </div>
         ))}
+
+        {loading && (
+          <div style={styles.aiMessage}>Typing...</div>
+        )}
       </div>
 
       <div style={styles.inputArea}>
