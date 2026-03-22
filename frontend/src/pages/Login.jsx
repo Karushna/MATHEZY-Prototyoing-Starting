@@ -19,37 +19,102 @@ function Login() {
   };
 
   return (
-    <div style={styles.container}>
-      <h2>Login</h2>
+    <div style={styles.page}>
+      <div style={styles.card}>
 
-      <input
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
+        <h2 style={styles.title}>Welcome Back 👋</h2>
+        <p style={styles.subtitle}>Login to continue learning</p>
 
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
+        <input
+          style={styles.input}
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
 
-      <button onClick={handleLogin}>Login</button>
+        <input
+          style={styles.input}
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
 
-      <p>
-        Don’t have an account?{" "}
-        <Link to="/register">Register</Link>
-      </p>
+        <button style={styles.button} onClick={handleLogin}>
+          Login
+        </button>
+
+        <p style={styles.text}>
+          Don’t have an account?{" "}
+          <Link to="/register" style={styles.link}>
+            Create one
+          </Link>
+        </p>
+
+      </div>
     </div>
   );
 }
 
 const styles = {
-  container: {
+  page: {
+    height: "100vh",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    background: "linear-gradient(135deg, #e8f5e9, #c8e6c9)",
+  },
+
+  card: {
+    background: "white",
+    padding: "40px",
+    borderRadius: "12px",
+    width: "350px",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
     textAlign: "center",
-    marginTop: "50px"
-  }
+  },
+
+  title: {
+    marginBottom: "10px",
+  },
+
+  subtitle: {
+    marginBottom: "25px",
+    color: "#666",
+  },
+
+  input: {
+    width: "100%",
+    padding: "12px",
+    marginBottom: "15px",
+    borderRadius: "8px",
+    border: "1px solid #ddd",
+    fontSize: "14px",
+  },
+
+  button: {
+    width: "100%",
+    padding: "12px",
+    background: "linear-gradient(135deg, #4CAF50, #2e7d32)",
+    color: "white",
+    border: "none",
+    borderRadius: "8px",
+    fontSize: "16px",
+    cursor: "pointer",
+    marginTop: "10px",
+  },
+
+  text: {
+    marginTop: "20px",
+    fontSize: "14px",
+  },
+
+  link: {
+    color: "#2e7d32",
+    textDecoration: "none",
+    fontWeight: "bold",
+  },
 };
 
 export default Login;

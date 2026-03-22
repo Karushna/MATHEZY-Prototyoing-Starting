@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import axios from "axios";
 
 function ChatTutor() {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const chatEndRef = useRef(null);
 
   const sendQuestion = async () => {
     if (!question.trim()) return;
@@ -16,28 +17,23 @@ function ChatTutor() {
 
     try {
       const response = await axios.post("http://127.0.0.1:8000/ask-ai", {
-        question: question
+        question: question,
       });
 
-      console.log("API Response:", response.data);
-
       setMessages([
         ...newMessages,
         {
           role: "ai",
-          text: response.data.explanation || "No response from AI"
-        }
+          text: response.data.explanation || "No response from AI",
+        },
       ]);
-
     } catch (error) {
-      console.error(error);
-
       setMessages([
         ...newMessages,
         {
           role: "ai",
-          text: "❌ Error: Unable to connect to AI server"
-        }
+          text: "❌ Error: Unable to connect to AI server",
+        },
       ]);
     }
 
@@ -45,35 +41,59 @@ function ChatTutor() {
     setQuestion("");
   };
 
-  return (
-    <div style={styles.container}>
-      <h2>AI Math Tutor</h2>
+  // Auto scroll
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
 
-      <div style={styles.chatBox}>
+  return (
+    <div style={styles.page}>
+
+      {/* TOP BAR */}
+      <div style={styles.nav}>
+        <h3>🤖 AI Math Tutor</h3>
+      </div>
+
+      {/* CHAT AREA */}
+      <div style={styles.chatContainer}>
         {messages.map((msg, index) => (
           <div
             key={index}
             style={
               msg.role === "user"
-                ? styles.userMessage
-                : styles.aiMessage
+                ? styles.userWrapper
+                : styles.aiWrapper
             }
           >
-            {msg.text}
+            <div
+              style={
+                msg.role === "user"
+                  ? styles.userMessage
+                  : styles.aiMessage
+              }
+            >
+              {msg.text}
+            </div>
           </div>
         ))}
 
         {loading && (
-          <div style={styles.aiMessage}>Typing...</div>
+          <div style={styles.aiWrapper}>
+            <div style={styles.aiMessage}>Typing...</div>
+          </div>
         )}
+
+        <div ref={chatEndRef} />
       </div>
 
+      {/* INPUT */}
       <div style={styles.inputArea}>
         <input
           style={styles.input}
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="Ask a math question..."
+          onKeyDown={(e) => e.key === "Enter" && sendQuestion()}
         />
 
         <button style={styles.button} onClick={sendQuestion}>
@@ -85,53 +105,83 @@ function ChatTutor() {
 }
 
 const styles = {
-  container: {
-    width: "600px",
-    margin: "50px auto",
-    textAlign: "center"
+  page: {
+    display: "flex",
+    flexDirection: "column",
+    height: "100vh",
+    fontFamily: "Inter, Arial, sans-serif",
+    background: "#f9fafb",
   },
-  chatBox: {
-    height: "400px",
-    border: "1px solid #ccc",
-    borderRadius: "10px",
-    padding: "10px",
+
+  /* NAV */
+  nav: {
+    padding: "15px 20px",
+    background: "white",
+    borderBottom: "1px solid #eee",
+  },
+
+  /* CHAT */
+  chatContainer: {
+    flex: 1,
+    padding: "20px",
     overflowY: "auto",
-    marginBottom: "10px",
-    background: "#f9f9f9"
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
   },
+
+  userWrapper: {
+    display: "flex",
+    justifyContent: "flex-end",
+  },
+
+  aiWrapper: {
+    display: "flex",
+    justifyContent: "flex-start",
+  },
+
   userMessage: {
-    textAlign: "right",
-    margin: "5px",
-    padding: "10px",
-    background: "#4CAF50",
+    background: "linear-gradient(135deg, #4CAF50, #2e7d32)",
     color: "white",
-    borderRadius: "10px"
+    padding: "12px 16px",
+    borderRadius: "15px 15px 0 15px",
+    maxWidth: "60%",
   },
+
   aiMessage: {
-    textAlign: "left",
-    margin: "5px",
-    padding: "10px",
-    background: "#e0e0e0",
-    borderRadius: "10px"
+    background: "white",
+    padding: "12px 16px",
+    borderRadius: "15px 15px 15px 0",
+    maxWidth: "60%",
+    boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
   },
+
+  /* INPUT */
   inputArea: {
     display: "flex",
-    gap: "10px"
+    padding: "15px",
+    borderTop: "1px solid #eee",
+    background: "white",
   },
+
   input: {
     flex: 1,
-    padding: "10px",
-    borderRadius: "5px",
-    border: "1px solid #ccc"
+    padding: "12px",
+    borderRadius: "8px",
+    border: "1px solid #ddd",
+    fontSize: "14px",
+    outline: "none",
   },
+
   button: {
-    padding: "10px",
+    marginLeft: "10px",
+    padding: "12px 20px",
     background: "#4CAF50",
     color: "white",
     border: "none",
-    borderRadius: "5px",
-    cursor: "pointer"
-  }
+    borderRadius: "8px",
+    cursor: "pointer",
+  },
 };
 
 export default ChatTutor;
