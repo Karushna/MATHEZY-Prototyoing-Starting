@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+import { signOut } from "firebase/auth";
 
 const topicsList = ["arithmetic", "algebra", "geometry", "stats"];
 
 function Progress() {
   const [data, setData] = useState({});
-  const [weakTopic, setWeakTopic] = useState("");
+  const [weakTopics, setWeakTopics] = useState([]);
+  const [insight, setInsight] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -52,7 +54,6 @@ function Progress() {
       topics[t].time += d.timeTaken || 0;
     });
 
-    // 🔥 SCORE CALCULATION
     Object.keys(topics).forEach((t) => {
       const item = topics[t];
 
@@ -73,181 +74,266 @@ function Progress() {
       item.score = Math.max(0, Math.min(100, score)).toFixed(1);
     });
 
-    // Weak topic
-    let weakest = "";
-    let min = 100;
-    Object.keys(topics).forEach((t) => {
-      if (topics[t].score < min) {
-        min = topics[t].score;
-        weakest = t;
-      }
-    });
+    const weak = topicsList.filter((t) => topics[t].score < 50);
 
-    setWeakTopic(weakest);
+    setWeakTopics(weak);
     setData(topics);
+
+    generateInsight(topics, weak);
   };
+
+  /* 🧠 PERSONALIZED INSIGHT */
+  const generateInsight = (topics, weak) => {
+  let messages = [];
+
+  topicsList.forEach((t) => {
+    const d = topics[t];
+    if (!d || d.total === 0) return;
+
+    const accuracy = d.correct / d.total;
+    const avgTime = d.time / d.total;
+    const hintRate = d.hints / d.total;
+
+    // 🔴 Accuracy issues
+    if (accuracy < 0.5) {
+      messages.push(
+        `In ${capitalize(
+          t
+        )}, you're getting many answers wrong. Try slowing down and focusing on understanding the steps rather than rushing.`
+      );
+    }
+
+    // 🟡 Too many hints
+    if (hintRate > 0.4) {
+      messages.push(
+        `You're relying quite a bit on hints in ${capitalize(
+          t
+        )}. Try attempting the problem a bit longer before asking for help — it will strengthen your thinking.`
+      );
+    }
+
+    // 🔵 Speed issues
+    if (avgTime > 40) {
+      messages.push(
+        `You're taking longer than usual in ${capitalize(
+          t
+        )}. Practicing similar problems can help improve your speed and confidence.`
+      );
+    }
+
+    // 🟢 Strong area
+    if (accuracy > 0.8 && hintRate < 0.2 && avgTime < 30) {
+      messages.push(
+        `You're doing great in ${capitalize(
+          t
+        )} — strong accuracy, good speed, and minimal hints. Keep it up!`
+      );
+    }
+  });
+
+  // 🔥 Fallback if no strong signals
+  if (messages.length === 0) {
+    messages.push(
+      "You're making steady progress. Keep practicing consistently to improve even further."
+    );
+  }
+
+  // Combine naturally
+  const finalMessage =
+    "Here’s what I’ve noticed from your recent practice:\n\n" +
+    messages.slice(0, 3).join(" ") +
+    "\n\nKeep going — you're improving with every step 🚀";
+
+  setInsight(finalMessage);
+};
 
   const handlePractice = (topic) => {
     navigate(`/practice?topic=${topic}`);
   };
 
+  const handleLogout = async () => {
+    await signOut(auth);
+    navigate("/login");
+  };
+
   return (
     <div style={styles.page}>
-      <h1 style={styles.title}>Your Progress</h1>
+      {/* NAVBAR */}
+      <nav style={styles.nav}>
+        <button style={styles.backBtn} onClick={() => navigate("/dashboard")}>
+          ← Back
+        </button>
 
-      {/* 🧠 MATHEZY INSIGHTS */}
-      <div style={styles.insightBox}>
-        <h2 style={styles.insightTitle}> Mathezy AI Insights</h2>
-
-        <div style={styles.insightGrid}>
-          <div>
-            <h4>✅ Strengths</h4>
-            {topicsList
-              .filter((t) => data[t]?.score > 75)
-              .map((t) => (
-                <p key={t}>• Strong in {capitalize(t)}</p>
-              ))}
-          </div>
-
-          <div>
-            <h4>⚠️ Weak Areas</h4>
-            {topicsList
-              .filter((t) => data[t]?.score < 50)
-              .map((t) => (
-                <p key={t}>• Needs work: {capitalize(t)}</p>
-              ))}
-          </div>
-
-          <div>
-            <h4>⚡ Speed</h4>
-            <p>• Improve time efficiency</p>
-          </div>
+        <div style={styles.navRight}>
+          <span>👤 {auth.currentUser?.email}</span>
+          <button style={styles.logoutBtn} onClick={handleLogout}>
+            Logout
+          </button>
         </div>
+      </nav>
+
+      {/* HEADER */}
+      <div style={styles.header}>
+        <h1 style={styles.title}>Your Progress</h1>
+        <p style={styles.subtitle}>
+          Track your growth and improve smarter 📊
+        </p>
       </div>
 
-      {/* 🔥 SUBJECT CARDS */}
+      {/* CARDS */}
       <div style={styles.grid}>
-        {topicsList.map((t) => {
+        {topicsList.map((t, i) => {
           const d = data[t] || {};
           const score = d.score || 0;
 
           return (
-            <div
-              key={t}
-              style={{
-                ...styles.card,
-                border:
-                  t === weakTopic
-                    ? "2px solid #ef4444"
-                    : "1px solid #eee",
-              }}
-            >
-              <h3>{capitalize(t)}</h3>
+            <div key={t} style={{ ...styles.card, ...styles.gradients[i] }}>
+              <h3 style={styles.cardTitle}>{capitalize(t)}</h3>
 
-              {/* Circle */}
-              <div style={styles.circle}>
-                <span>{score}%</span>
+              <div style={styles.scoreCircle}>{score}%</div>
+
+              <div style={styles.stats}>
+                <div>✅ {d.correct || 0} Correct</div>
+                <div>❌ {d.wrong || 0} Mistakes</div>
+                <div>💡 {d.hints || 0} Hints</div>
+                <div>⏱ {Math.round(d.time || 0)} s</div>
               </div>
-
-              <p>Correct: {d.correct || 0}</p>
-              <p>Mistakes: {d.wrong || 0}</p>
-              <p>Hints: {d.hints || 0}</p>
-              <p>⏱ {Math.round(d.time || 0)} sec</p>
 
               <button
                 style={styles.btn}
                 onClick={() => handlePractice(t)}
               >
-                Practice More
+                Practice →
               </button>
-
-              {t === weakTopic && (
-                <p style={styles.warning}>Needs Attention</p>
-              )}
             </div>
           );
         })}
+      </div>
+
+      {/* 🧠 INSIGHT */}
+      <div style={styles.insightCard}>
+        <h2>🧠 Mathezy Insight</h2>
+        <p style={styles.insightText}>{insight}</p>
       </div>
     </div>
   );
 }
 
-function capitalize(text) {
-  return text?.charAt(0).toUpperCase() + text?.slice(1);
-}
+/* HELPER */
+const capitalize = (text) =>
+  text?.charAt(0).toUpperCase() + text?.slice(1);
 
-/* 🎨 STYLES */
+/* STYLES */
 const styles = {
   page: {
-    padding: "40px",
     fontFamily: "Inter",
     background: "#f9fafb",
+    minHeight: "100vh",
   },
 
-  title: {
-    textAlign: "center",
-    fontSize: "36px",
-    marginBottom: "30px",
-  },
-
-  insightBox: {
+  nav: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "20px 40px",
     background: "white",
-    padding: "20px",
-    borderRadius: "16px",
-    marginBottom: "30px",
-    boxShadow: "0 6px 20px rgba(0,0,0,0.05)",
+    borderBottom: "1px solid #eee",
   },
 
-  insightTitle: {
-    marginBottom: "15px",
+  navRight: {
+    display: "flex",
+    gap: "15px",
+    alignItems: "center",
   },
 
-  insightGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: "20px",
+  logoutBtn: {
+    background: "#111",
+    color: "white",
+    borderRadius: "8px",
+    padding: "6px 12px",
   },
+
+  backBtn: {
+    border: "1px solid #ddd",
+    padding: "6px 12px",
+    borderRadius: "8px",
+    background: "white",
+    cursor: "pointer",
+  },
+
+  header: {
+    textAlign: "center",
+    padding: "40px",
+  },
+
+  title: { fontSize: "36px" },
+
+  subtitle: { color: "#666" },
 
   grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(2, 1fr)",
-    gap: "20px",
+    gridTemplateColumns: "repeat(2,1fr)",
+    gap: "28px",
+    maxWidth: "900px",
+    margin: "0 auto",
   },
 
   card: {
-    background: "white",
-    padding: "20px",
-    borderRadius: "16px",
+    padding: "30px",
+    borderRadius: "20px",
     textAlign: "center",
-    boxShadow: "0 6px 20px rgba(0,0,0,0.05)",
+    boxShadow: "0 12px 30px rgba(0,0,0,0.08)",
   },
 
-  circle: {
-    width: "80px",
-    height: "80px",
+  gradients: [
+    { background: "linear-gradient(135deg,#e8f5e9,#fff)" },
+    { background: "linear-gradient(135deg,#e3f2fd,#fff)" },
+    { background: "linear-gradient(135deg,#f3e5f5,#fff)" },
+    { background: "linear-gradient(135deg,#fff3e0,#fff)" },
+  ],
+
+  cardTitle: { fontSize: "20px" },
+
+  scoreCircle: {
+    margin: "15px auto",
+    width: "90px",
+    height: "90px",
     borderRadius: "50%",
     border: "6px solid #22c55e",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    margin: "10px auto",
     fontWeight: "bold",
   },
 
-  btn: {
-    marginTop: "10px",
-    padding: "8px",
-    borderRadius: "8px",
-    border: "none",
-    background: "#111",
-    color: "white",
-    cursor: "pointer",
+  stats: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "10px",
+    fontSize: "14px",
+    marginBottom: "15px",
   },
 
-  warning: {
-    color: "#ef4444",
-    fontSize: "12px",
-    marginTop: "8px",
+  btn: {
+    background: "#111",
+    color: "white",
+    padding: "10px",
+    borderRadius: "10px",
+  },
+
+  insightCard: {
+    marginTop: "40px",
+    maxWidth: "900px",
+    marginInline: "auto",
+    padding: "25px",
+    borderRadius: "18px",
+    background: "white",
+    boxShadow: "0 10px 25px rgba(0,0,0,0.05)",
+  },
+
+  insightText: {
+    marginTop: "10px",
+    color: "#444",
+    lineHeight: "1.6",
   },
 };
 
