@@ -1,180 +1,291 @@
 import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import axios from "axios";
+
+const topicsList = ["arithmetic", "algebra", "geometry", "stats"];
 
 function Progress() {
-  const [total, setTotal] = useState(0);
-  const [correct, setCorrect] = useState(0);
-  const [accuracy, setAccuracy] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState({});
+  const [insights, setInsights] = useState("");
 
   useEffect(() => {
-    const fetchProgress = async () => {
-      try {
-        const user = auth.currentUser;
-        if (!user) return;
-
-        const querySnapshot = await getDocs(collection(db, "progress"));
-
-        let totalQuestions = 0;
-        let correctAnswers = 0;
-
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-
-          if (data.userId === user.uid) {
-            totalQuestions++;
-            if (data.correct) correctAnswers++;
-          }
-        });
-
-        setTotal(totalQuestions);
-        setCorrect(correctAnswers);
-
-        const acc =
-          totalQuestions === 0
-            ? 0
-            : Math.round((correctAnswers / totalQuestions) * 100);
-
-        setAccuracy(acc);
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProgress();
+    fetchData();
   }, []);
+
+  const fetchData = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const q = query(
+      collection(db, "progress"),
+      where("userId", "==", user.uid)
+    );
+
+    const snapshot = await getDocs(q);
+
+    const topics = {};
+
+    // Initialize ALL topics
+    topicsList.forEach((t) => {
+      topics[t] = {
+        total: 0,
+        correct: 0,
+        wrong: 0,
+        hints: 0,
+        time: 0,
+        score: 0,
+      };
+    });
+
+    snapshot.forEach((doc) => {
+      const d = doc.data();
+      const t = d.topic;
+
+      if (!topics[t]) return;
+
+      topics[t].total += 1;
+      if (d.correct) topics[t].correct += 1;
+      else topics[t].wrong += 1;
+
+      if (d.hintUsed) topics[t].hints += 1;
+      topics[t].time += d.timeTaken || 0;
+    });
+
+    // 🔥 SMART SCORE CALCULATION
+    Object.keys(topics).forEach((t) => {
+      const item = topics[t];
+
+      if (item.total === 0) {
+        item.score = 0;
+        return;
+      }
+
+      const accuracy = item.correct / item.total;
+      const hintPenalty = item.hints / item.total;
+      const timePenalty = item.time / (item.total * 30); // 30s ideal
+
+      let score =
+        accuracy * 100 -
+        hintPenalty * 20 -
+        timePenalty * 10;
+
+      score = Math.max(0, Math.min(100, score));
+      item.score = score.toFixed(1);
+    });
+
+    setData(topics);
+
+    generateInsights(topics);
+  };
+
+  // 🤖 AI Insights
+  const generateInsights = async (topics) => {
+    const summary = JSON.stringify(topics);
+
+    try {
+      const res = await axios.post("http://127.0.0.1:8000/ask-ai", {
+        question: `Analyze student performance and give short feedback + recommendation: ${summary}`,
+      });
+
+      setInsights(res.data.explanation);
+    } catch {
+      setInsights("Keep practicing! You're improving steadily.");
+    }
+  };
 
   return (
     <div style={styles.page}>
+      <h1 style={styles.title}>Your Progress</h1>
+      <p style={styles.subtitle}>
+        AI-powered performance insights
+      </p>
 
-      {/* HEADER */}
-      <div style={styles.header}>
-        <h1>Your Progress</h1>
-        <p>Track your learning journey 📈</p>
+      {/* 🔥 GRID 2x2 */}
+      <div style={styles.grid}>
+        {topicsList.map((topic) => {
+          const t = data[topic] || {};
+
+          return (
+            <div key={topic} style={styles.card}>
+              <h2 style={styles.topicTitle}>{capitalize(topic)}</h2>
+
+              {/* Score Bar */}
+              <div style={styles.progressBar}>
+                <div
+                  style={{
+                    ...styles.progressFill,
+                    width: `${t.score || 0}%`,
+                  }}
+                />
+              </div>
+
+              <p style={styles.score}>
+                {t.score || 0}% Performance
+              </p>
+
+              {/* Stats */}
+              <div style={styles.stats}>
+                <Stat label="Total" value={t.total || 0} />
+                <Stat label="Correct" value={t.correct || 0} />
+                <Stat label="Mistakes" value={t.wrong || 0} />
+                <Stat label="Hints" value={t.hints || 0} />
+              </div>
+
+              <p style={styles.time}>
+                ⏱ {Math.round(t.time || 0)} sec
+              </p>
+            </div>
+          );
+        })}
       </div>
 
-      {loading ? (
-        <p style={{ textAlign: "center" }}>Loading...</p>
-      ) : (
-        <div style={styles.container}>
-
-          {/* STATS CARDS */}
-          <div style={styles.grid}>
-            <div style={styles.card}>
-              <h3>{total}</h3>
-              <p>Total Questions</p>
-            </div>
-
-            <div style={styles.card}>
-              <h3>{correct}</h3>
-              <p>Correct Answers</p>
-            </div>
-
-            <div style={styles.card}>
-              <h3>{accuracy}%</h3>
-              <p>Accuracy</p>
-            </div>
-          </div>
-
-          {/* PROGRESS BAR */}
-          <div style={styles.progressSection}>
-            <p style={styles.progressLabel}>Accuracy Progress</p>
-
-            <div style={styles.progressBar}>
+      {/* 📊 GRAPH */}
+      <div style={styles.graphContainer}>
+        <h2>Performance Overview</h2>
+        <div style={styles.graph}>
+          {topicsList.map((t) => (
+            <div key={t} style={styles.barBox}>
               <div
                 style={{
-                  ...styles.progressFill,
-                  width: `${accuracy}%`,
+                  ...styles.bar,
+                  height: `${data[t]?.score || 0}%`,
                 }}
               />
+              <p>{capitalize(t)}</p>
             </div>
-
-            <p style={styles.progressText}>
-              {accuracy}% performance
-            </p>
-          </div>
-
-          {/* MOTIVATION */}
-          <div style={styles.message}>
-            {accuracy >= 80 && "🔥 Excellent work! Keep it up!"}
-            {accuracy >= 50 && accuracy < 80 && "👍 Good progress, keep practicing!"}
-            {accuracy < 50 && "💪 Keep going, you’ll improve!"}
-          </div>
-
+          ))}
         </div>
-      )}
+      </div>
+
+      {/* 🤖 AI INSIGHTS */}
+      <div style={styles.insightBox}>
+        <h2>AI Feedback</h2>
+        <p>{insights}</p>
+      </div>
     </div>
   );
 }
 
+/* COMPONENTS */
+function Stat({ label, value }) {
+  return (
+    <div style={styles.statBox}>
+      <p style={styles.statValue}>{value}</p>
+      <p style={styles.statLabel}>{label}</p>
+    </div>
+  );
+}
+
+function capitalize(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/* 🎨 STYLES */
 const styles = {
   page: {
+    padding: "50px 20px",
+    fontFamily: "Inter",
+    background: "#f9fafb",
     minHeight: "100vh",
-    background: "#ffffff",
-    fontFamily: "Inter, system-ui",
-    padding: "60px 20px",
   },
 
-  header: {
+  title: {
     textAlign: "center",
-    marginBottom: "40px",
+    fontSize: "36px",
+    fontWeight: "700",
   },
 
-  container: {
-    maxWidth: "700px",
-    margin: "0 auto",
+  subtitle: {
+    textAlign: "center",
+    color: "#666",
+    marginBottom: "40px",
   },
 
   grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-    gap: "20px",
-    marginBottom: "40px",
+    gridTemplateColumns: "repeat(2, 1fr)", // 🔥 2x2 layout
+    gap: "25px",
+    maxWidth: "800px",
+    margin: "0 auto",
   },
 
   card: {
-    background: "#f7f7f7",
+    background: "white",
     padding: "25px",
-    borderRadius: "12px",
+    borderRadius: "16px",
+    boxShadow: "0 6px 20px rgba(0,0,0,0.06)",
     textAlign: "center",
   },
 
-  progressSection: {
-    marginTop: "20px",
-  },
-
-  progressLabel: {
+  topicTitle: {
     marginBottom: "10px",
-    fontWeight: "500",
+    fontWeight: "600",
   },
 
   progressBar: {
-    height: "12px",
+    height: "10px",
     background: "#eee",
     borderRadius: "10px",
-    overflow: "hidden",
   },
 
   progressFill: {
     height: "100%",
     background: "#4CAF50",
     borderRadius: "10px",
-    transition: "width 0.5s ease",
   },
 
-  progressText: {
-    marginTop: "10px",
-    textAlign: "center",
-  },
-
-  message: {
-    marginTop: "30px",
-    textAlign: "center",
-    fontSize: "18px",
+  score: {
+    marginTop: "8px",
     fontWeight: "500",
+  },
+
+  stats: {
+    display: "flex",
+    justifyContent: "space-between",
+    marginTop: "15px",
+  },
+
+  statBox: { textAlign: "center" },
+
+  statValue: { fontWeight: "600" },
+
+  statLabel: { fontSize: "12px", color: "#666" },
+
+  time: {
+    marginTop: "10px",
+    fontSize: "14px",
+  },
+
+  graphContainer: {
+    marginTop: "50px",
+    textAlign: "center",
+  },
+
+  graph: {
+    display: "flex",
+    justifyContent: "center",
+    gap: "30px",
+    marginTop: "20px",
+  },
+
+  barBox: {
+    textAlign: "center",
+  },
+
+  bar: {
+    width: "40px",
+    background: "#2563eb",
+    borderRadius: "6px",
+  },
+
+  insightBox: {
+    marginTop: "40px",
+    background: "white",
+    padding: "20px",
+    borderRadius: "12px",
+    maxWidth: "700px",
+    marginInline: "auto",
   },
 };
 
