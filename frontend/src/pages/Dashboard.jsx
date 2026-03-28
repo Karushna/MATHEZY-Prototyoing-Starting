@@ -1,14 +1,35 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { auth } from "../firebase";
+import { signOut } from "firebase/auth";
 
 function Dashboard() {
+  const navigate = useNavigate();
+  const user = auth.currentUser;
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate("/login");
+    } catch (error) {
+      alert(error.message);
+    }
+  };
+
   return (
     <div style={styles.page}>
 
       {/* NAVBAR */}
       <nav style={styles.nav}>
         <h2 style={styles.logo}>Mathezy</h2>
+
         <div style={styles.navRight}>
-          <span style={styles.user}>👤 Student</span>
+          <span style={styles.user}>
+            👤 {user?.email || "Student"}
+          </span>
+
+          <button style={styles.logoutBtn} onClick={handleLogout}>
+            Logout
+          </button>
         </div>
       </nav>
 
@@ -49,7 +70,6 @@ const styles = {
     minHeight: "100vh",
   },
 
-  /* NAVBAR */
   nav: {
     display: "flex",
     justifyContent: "space-between",
@@ -67,6 +87,7 @@ const styles = {
   navRight: {
     display: "flex",
     alignItems: "center",
+    gap: "15px",
   },
 
   user: {
@@ -74,12 +95,19 @@ const styles = {
     color: "#555",
   },
 
-  /* HEADER */
+  logoutBtn: {
+    padding: "6px 12px",
+    background: "#555",
+    color: "white",
+    border: "none",
+    borderRadius: "5px",
+    cursor: "pointer",
+  },
+
   header: {
     padding: "40px",
   },
 
-  /* GRID */
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
@@ -87,7 +115,6 @@ const styles = {
     padding: "0 40px 40px",
   },
 
-  /* CARD */
   card: {
     background: "white",
     padding: "30px",
