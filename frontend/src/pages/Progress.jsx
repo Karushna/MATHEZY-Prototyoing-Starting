@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
-import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 const topicsList = ["arithmetic", "algebra", "geometry", "stats"];
 
 function Progress() {
   const [data, setData] = useState({});
-  const [insights, setInsights] = useState("");
+  const [weakTopic, setWeakTopic] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchData();
@@ -26,7 +27,6 @@ function Progress() {
 
     const topics = {};
 
-    // Initialize ALL topics
     topicsList.forEach((t) => {
       topics[t] = {
         total: 0,
@@ -52,7 +52,7 @@ function Progress() {
       topics[t].time += d.timeTaken || 0;
     });
 
-    // 🔥 SMART SCORE CALCULATION
+    // 🔥 SCORE CALCULATION
     Object.keys(topics).forEach((t) => {
       const item = topics[t];
 
@@ -63,229 +63,191 @@ function Progress() {
 
       const accuracy = item.correct / item.total;
       const hintPenalty = item.hints / item.total;
-      const timePenalty = item.time / (item.total * 30); // 30s ideal
+      const timePenalty = item.time / (item.total * 30);
 
       let score =
-        accuracy * 100 -
-        hintPenalty * 20 -
-        timePenalty * 10;
+        accuracy * 70 +
+        (1 - hintPenalty) * 20 +
+        (1 - Math.min(timePenalty, 1)) * 10;
 
-      score = Math.max(0, Math.min(100, score));
-      item.score = score.toFixed(1);
+      item.score = Math.max(0, Math.min(100, score)).toFixed(1);
     });
 
-    setData(topics);
+    // Weak topic
+    let weakest = "";
+    let min = 100;
+    Object.keys(topics).forEach((t) => {
+      if (topics[t].score < min) {
+        min = topics[t].score;
+        weakest = t;
+      }
+    });
 
-    generateInsights(topics);
+    setWeakTopic(weakest);
+    setData(topics);
   };
 
-  // 🤖 AI Insights
-  const generateInsights = async (topics) => {
-    const summary = JSON.stringify(topics);
-
-    try {
-      const res = await axios.post("http://127.0.0.1:8000/ask-ai", {
-        question: `Analyze student performance and give short feedback + recommendation: ${summary}`,
-      });
-
-      setInsights(res.data.explanation);
-    } catch {
-      setInsights("Keep practicing! You're improving steadily.");
-    }
+  const handlePractice = (topic) => {
+    navigate(`/practice?topic=${topic}`);
   };
 
   return (
     <div style={styles.page}>
       <h1 style={styles.title}>Your Progress</h1>
-      <p style={styles.subtitle}>
-        AI-powered performance insights
-      </p>
 
-      {/* 🔥 GRID 2x2 */}
+      {/* 🧠 MATHEZY INSIGHTS */}
+      <div style={styles.insightBox}>
+        <h2 style={styles.insightTitle}> Mathezy AI Insights</h2>
+
+        <div style={styles.insightGrid}>
+          <div>
+            <h4>✅ Strengths</h4>
+            {topicsList
+              .filter((t) => data[t]?.score > 75)
+              .map((t) => (
+                <p key={t}>• Strong in {capitalize(t)}</p>
+              ))}
+          </div>
+
+          <div>
+            <h4>⚠️ Weak Areas</h4>
+            {topicsList
+              .filter((t) => data[t]?.score < 50)
+              .map((t) => (
+                <p key={t}>• Needs work: {capitalize(t)}</p>
+              ))}
+          </div>
+
+          <div>
+            <h4>⚡ Speed</h4>
+            <p>• Improve time efficiency</p>
+          </div>
+        </div>
+      </div>
+
+      {/* 🔥 SUBJECT CARDS */}
       <div style={styles.grid}>
-        {topicsList.map((topic) => {
-          const t = data[topic] || {};
+        {topicsList.map((t) => {
+          const d = data[t] || {};
+          const score = d.score || 0;
 
           return (
-            <div key={topic} style={styles.card}>
-              <h2 style={styles.topicTitle}>{capitalize(topic)}</h2>
+            <div
+              key={t}
+              style={{
+                ...styles.card,
+                border:
+                  t === weakTopic
+                    ? "2px solid #ef4444"
+                    : "1px solid #eee",
+              }}
+            >
+              <h3>{capitalize(t)}</h3>
 
-              {/* Score Bar */}
-              <div style={styles.progressBar}>
-                <div
-                  style={{
-                    ...styles.progressFill,
-                    width: `${t.score || 0}%`,
-                  }}
-                />
+              {/* Circle */}
+              <div style={styles.circle}>
+                <span>{score}%</span>
               </div>
 
-              <p style={styles.score}>
-                {t.score || 0}% Performance
-              </p>
+              <p>Correct: {d.correct || 0}</p>
+              <p>Mistakes: {d.wrong || 0}</p>
+              <p>Hints: {d.hints || 0}</p>
+              <p>⏱ {Math.round(d.time || 0)} sec</p>
 
-              {/* Stats */}
-              <div style={styles.stats}>
-                <Stat label="Total" value={t.total || 0} />
-                <Stat label="Correct" value={t.correct || 0} />
-                <Stat label="Mistakes" value={t.wrong || 0} />
-                <Stat label="Hints" value={t.hints || 0} />
-              </div>
+              <button
+                style={styles.btn}
+                onClick={() => handlePractice(t)}
+              >
+                Practice More
+              </button>
 
-              <p style={styles.time}>
-                ⏱ {Math.round(t.time || 0)} sec
-              </p>
+              {t === weakTopic && (
+                <p style={styles.warning}>Needs Attention</p>
+              )}
             </div>
           );
         })}
       </div>
-
-      {/* 📊 GRAPH */}
-      <div style={styles.graphContainer}>
-        <h2>Performance Overview</h2>
-        <div style={styles.graph}>
-          {topicsList.map((t) => (
-            <div key={t} style={styles.barBox}>
-              <div
-                style={{
-                  ...styles.bar,
-                  height: `${data[t]?.score || 0}%`,
-                }}
-              />
-              <p>{capitalize(t)}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 🤖 AI INSIGHTS */}
-      <div style={styles.insightBox}>
-        <h2>AI Feedback</h2>
-        <p>{insights}</p>
-      </div>
-    </div>
-  );
-}
-
-/* COMPONENTS */
-function Stat({ label, value }) {
-  return (
-    <div style={styles.statBox}>
-      <p style={styles.statValue}>{value}</p>
-      <p style={styles.statLabel}>{label}</p>
     </div>
   );
 }
 
 function capitalize(text) {
-  return text.charAt(0).toUpperCase() + text.slice(1);
+  return text?.charAt(0).toUpperCase() + text?.slice(1);
 }
 
 /* 🎨 STYLES */
 const styles = {
   page: {
-    padding: "50px 20px",
+    padding: "40px",
     fontFamily: "Inter",
     background: "#f9fafb",
-    minHeight: "100vh",
   },
 
   title: {
     textAlign: "center",
     fontSize: "36px",
-    fontWeight: "700",
+    marginBottom: "30px",
   },
 
-  subtitle: {
-    textAlign: "center",
-    color: "#666",
-    marginBottom: "40px",
+  insightBox: {
+    background: "white",
+    padding: "20px",
+    borderRadius: "16px",
+    marginBottom: "30px",
+    boxShadow: "0 6px 20px rgba(0,0,0,0.05)",
+  },
+
+  insightTitle: {
+    marginBottom: "15px",
+  },
+
+  insightGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: "20px",
   },
 
   grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(2, 1fr)", // 🔥 2x2 layout
-    gap: "25px",
-    maxWidth: "800px",
-    margin: "0 auto",
+    gridTemplateColumns: "repeat(2, 1fr)",
+    gap: "20px",
   },
 
   card: {
     background: "white",
-    padding: "25px",
-    borderRadius: "16px",
-    boxShadow: "0 6px 20px rgba(0,0,0,0.06)",
-    textAlign: "center",
-  },
-
-  topicTitle: {
-    marginBottom: "10px",
-    fontWeight: "600",
-  },
-
-  progressBar: {
-    height: "10px",
-    background: "#eee",
-    borderRadius: "10px",
-  },
-
-  progressFill: {
-    height: "100%",
-    background: "#4CAF50",
-    borderRadius: "10px",
-  },
-
-  score: {
-    marginTop: "8px",
-    fontWeight: "500",
-  },
-
-  stats: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginTop: "15px",
-  },
-
-  statBox: { textAlign: "center" },
-
-  statValue: { fontWeight: "600" },
-
-  statLabel: { fontSize: "12px", color: "#666" },
-
-  time: {
-    marginTop: "10px",
-    fontSize: "14px",
-  },
-
-  graphContainer: {
-    marginTop: "50px",
-    textAlign: "center",
-  },
-
-  graph: {
-    display: "flex",
-    justifyContent: "center",
-    gap: "30px",
-    marginTop: "20px",
-  },
-
-  barBox: {
-    textAlign: "center",
-  },
-
-  bar: {
-    width: "40px",
-    background: "#2563eb",
-    borderRadius: "6px",
-  },
-
-  insightBox: {
-    marginTop: "40px",
-    background: "white",
     padding: "20px",
-    borderRadius: "12px",
-    maxWidth: "700px",
-    marginInline: "auto",
+    borderRadius: "16px",
+    textAlign: "center",
+    boxShadow: "0 6px 20px rgba(0,0,0,0.05)",
+  },
+
+  circle: {
+    width: "80px",
+    height: "80px",
+    borderRadius: "50%",
+    border: "6px solid #22c55e",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    margin: "10px auto",
+    fontWeight: "bold",
+  },
+
+  btn: {
+    marginTop: "10px",
+    padding: "8px",
+    borderRadius: "8px",
+    border: "none",
+    background: "#111",
+    color: "white",
+    cursor: "pointer",
+  },
+
+  warning: {
+    color: "#ef4444",
+    fontSize: "12px",
+    marginTop: "8px",
   },
 };
 

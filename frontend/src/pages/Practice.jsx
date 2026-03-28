@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { db, auth } from "../firebase";
 import { collection, addDoc } from "firebase/firestore";
+import { useLocation } from "react-router-dom";
 
 function Practice() {
   const [topic, setTopic] = useState(null);
@@ -15,6 +16,11 @@ function Practice() {
   const [time, setTime] = useState(0);
   const [hintUsed, setHintUsed] = useState(false);
 
+  // ✅ URL HANDLING
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const topicFromURL = params.get("topic");
+
   // ⏱ TIMER
   useEffect(() => {
     if (!question) return;
@@ -26,22 +32,37 @@ function Practice() {
     return () => clearInterval(timer);
   }, [question]);
 
+  // 🔥 GENERATE QUESTION
   const generateQuestion = async (selectedTopic = topic) => {
     if (!selectedTopic) return;
 
-    const res = await axios.post("http://127.0.0.1:8000/generate-question", {
-      topic: selectedTopic,
-    });
+    try {
+      const res = await axios.post(
+        "http://127.0.0.1:8000/generate-question",
+        { topic: selectedTopic }
+      );
 
-    setQuestion(res.data.question);
-    setCorrectAnswer(res.data.answer);
-    setUserAnswer("");
-    setResult("");
-    setHint("");
-    setTime(0);
-    setHintUsed(false);
+      setQuestion(res.data.question);
+      setCorrectAnswer(res.data.answer);
+      setUserAnswer("");
+      setResult("");
+      setHint("");
+      setTime(0);
+      setHintUsed(false);
+    } catch {
+      alert("Error generating question");
+    }
   };
 
+  // ✅ AUTO START FROM URL
+  useEffect(() => {
+    if (topicFromURL) {
+      setTopic(topicFromURL);
+      generateQuestion(topicFromURL);
+    }
+  }, [topicFromURL]);
+
+  // ✅ CHECK ANSWER
   const checkAnswer = async () => {
     if (!userAnswer) return;
 
@@ -50,12 +71,12 @@ function Practice() {
 
     setResult(isCorrect ? "correct" : "wrong");
 
-    // ✅ SAVE TO FIRESTORE
+    // 🔥 SAVE TO FIRESTORE
     const user = auth.currentUser;
     if (user) {
       await addDoc(collection(db, "progress"), {
         userId: user.uid,
-        topic: topic, // 🔥 VERY IMPORTANT
+        topic: topic,
         correct: isCorrect,
         hintUsed: hintUsed,
         timeTaken: time,
@@ -63,22 +84,29 @@ function Practice() {
       });
     }
 
+    // AUTO NEXT QUESTION
     setTimeout(() => {
       generateQuestion();
     }, 1200);
   };
 
+  // 🤖 HINT
   const getHint = async () => {
-    const res = await axios.post("http://127.0.0.1:8000/ask-ai", {
-      question,
-    });
+    try {
+      const res = await axios.post("http://127.0.0.1:8000/ask-ai", {
+        question,
+      });
 
-    setHint(res.data.explanation);
-    setHintUsed(true); // 🔥 track hint usage
+      setHint(res.data.explanation);
+      setHintUsed(true);
+    } catch {
+      alert("Error getting hint");
+    }
   };
 
   return (
     <div style={styles.page}>
+      {/* HOME */}
       {!topic && (
         <>
           <h1 style={styles.mainTitle}>Practice</h1>
@@ -101,6 +129,7 @@ function Practice() {
         </>
       )}
 
+      {/* PRACTICE */}
       {topic && (
         <div style={styles.practiceContainer}>
           <div style={styles.practiceHeader}>
@@ -115,9 +144,7 @@ function Practice() {
 
           <div style={styles.questionCard}>
             <h2 style={styles.question}>{question}</h2>
-            <p style={{ color: "#666", marginTop: "10px" }}>
-              ⏱ {time}s
-            </p>
+            <p style={{ color: "#666" }}>⏱ {time}s</p>
           </div>
 
           <div style={styles.answerBox}>
@@ -152,7 +179,7 @@ function Practice() {
   );
 }
 
-/* HOVER CARD */
+/* 🔥 HOVER CARD */
 function HoverCard({ sec, onClick }) {
   const [hover, setHover] = useState(false);
 
@@ -176,6 +203,7 @@ function HoverCard({ sec, onClick }) {
   );
 }
 
+/* DATA */
 const sections = [
   { key: "arithmetic", title: "Arithmetic", icon: "➕", desc: "Basic operations" },
   { key: "algebra", title: "Algebra", icon: "🔤", desc: "Solve equations" },
@@ -188,9 +216,12 @@ const getTitle = (key) => {
   return found ? found.title : "";
 };
 
+/* STYLES */
 const styles = {
   page: { padding: "60px 20px", fontFamily: "Inter", background: "#f9fafb" },
+
   mainTitle: { textAlign: "center", fontSize: "42px" },
+
   subtitle: { textAlign: "center", marginBottom: "40px", color: "#666" },
 
   grid: {
